@@ -20,7 +20,7 @@ Activate and use the `test` environment for further running of the code.
  
  The convergence and stability results is shown in the notebook Convergence_and_stability.ipynb.
  
- We give the example code to run the maxmin task using Set Twister model over image inputs. Here we use the tanh activation, sequence length equal to 5, and optimize using Adam with learning rate 0.0005 for 2,000 epochs and a minibatch size 128.
+ We give the example code to run the link prediction task using GraphSAGE model over randomly generated Stochastic block model with $N^\text{tr}=1000$ and $N^\text{te}=10000$. Here we optimize using Adam with learning rate 0.0005 for 1,000 epochs and a minibatch size 128.
  ```train
  python train.py -t maxmin -v -l 5e-4 -g 0 -p adam -b 128 -e 2000 -a tanh -m 2 -seq 5 -img
  ```
