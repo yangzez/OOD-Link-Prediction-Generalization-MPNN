@@ -6,8 +6,6 @@ This repository is the official implementation of OOD Link Prediction Generaliza
 
 We empirically validate our theoretical results using Stochastic block models. And we perform link predictions tasks using structural nodel representation GNN models: [GraphSAGE](https://github.com/williamleif/GraphSAGE), [GCN](https://github.com/tkipf/gcn), [GAT](https://personal.utdallas.edu/~fxc190007/courses/20S-7301/GAT-questions.pdf), [GIN](https://github.com/weihua916/powerful-gnns) before a link prediction MLP model using [Pytorch Geometric](https://github.com/pyg-team/pytorch_geometric).
 
-We empirically evaluate the performance of Set Twister on a variety of arithmetic tasks over image inputs and randomly encoded inputs, in terms of prediction accuracy, mean absolute error (MAE) and computational complexity. We compare Set Twister's performance against widely used permutation-invariant representations on a variety of tasks for which we know the task's high-order dependencies: [Deep Sets](https://github.com/manzilzaheer/DeepSets), [2-ary Janossy Pooling](https://github.com/PurdueMINDS/JanossyPooling), [Full Janossy Pooling using GRUs with attention mechanisms](https://github.com/PurdueMINDS/HATS) (JP Full) and [Set Transformer](https://github.com/juho-lee/set_transformer) without inducing points.
-
 ## Install
 
 To create the conda environment `test`, use the following command
@@ -37,3 +35,9 @@ Activate and use the `test` environment for further running of the code.
  * Change `-b` to set batch size
  * Change `-l` to set learning rate
  * Remove `-noinn` to perform link prediction using inner products of node representations obtained from GNNs
+
+
+ To run our proposed 2-gMPNN procedure, the example code is 
+  ```train
+  python learn-2-gmpnn.py -n 10 -n_runs 50 -e 1000 -hid 5 -b 128 -l 5e-4 -n_runs 50
+  ```
