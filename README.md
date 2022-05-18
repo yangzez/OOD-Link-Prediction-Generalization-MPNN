@@ -41,3 +41,10 @@ Activate and use the `test` environment for further running of the code.
   ```train
   python learn-2-gmpnn.py -n 10 -n_runs 50 -e 1000 -hid 5 -b 128 -l 5e-4 -n_runs 50
   ```
+  
+ To run our proposed 2-gMPNN procedure with fixed function (no learning), the example code is 
+  ```train
+  python 2-gmpnn.py -n 10 -n_runs 50
+  ```
+  
+  The arguments have the same meansing as above.
