@@ -16,10 +16,6 @@ conda env create -f dependency.yml
 
 Activate and use the `test` environment for further running of the code.
 
-```bash
-conda activate test
-```
-
 
 ## Generating the Raw Data of mnist8m dataset
 Change directory to `<root>/data` and run `python infimnist_parser.py` to get the mnist8m dataset.
