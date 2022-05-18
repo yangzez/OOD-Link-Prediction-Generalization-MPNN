@@ -6,15 +6,19 @@ This repository is the official implementation of Set Twister for Fast and Expre
 
 We empirically evaluate the performance of Set Twister on a variety of arithmetic tasks over image inputs and randomly encoded inputs, in terms of prediction accuracy, mean absolute error (MAE) and computational complexity. We compare Set Twister's performance against widely used permutation-invariant representations on a variety of tasks for which we know the task's high-order dependencies: [Deep Sets](https://github.com/manzilzaheer/DeepSets), [2-ary Janossy Pooling](https://github.com/PurdueMINDS/JanossyPooling), [Full Janossy Pooling using GRUs with attention mechanisms](https://github.com/PurdueMINDS/HATS) (JP Full) and [Set Transformer](https://github.com/juho-lee/set_transformer) without inducing points.
 
-## Requirements
+## Install
 
-To create the conda environment `py37`, use the following command
+To create the conda environment `test`, use the following command
 
 ```bash
-conda env create -f environment.yaml
+conda env create -f dependency.yml
 ```
 
-Activate and use the `py37` environment for further running of the code.
+Activate and use the `test` environment for further running of the code.
+
+```bash
+conda activate test
+```
 
 
 ## Generating the Raw Data of mnist8m dataset
