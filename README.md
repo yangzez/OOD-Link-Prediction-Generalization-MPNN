@@ -48,7 +48,7 @@ conda activate generalize
   
  To run our proposed 2-gMPNN procedure with fixed function (no learning), the example code is 
   ```train
-  python 2-gmpnn.py -n 10 -n_runs 50
+  python 2-gmpnn.py -n 10 -n_layers 3 -hid 10 -e 1000 -n_runs 50 -b 128 -l 5e-4
   ```
   
   The arguments have the same meansing as above.
