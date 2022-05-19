@@ -1,4 +1,4 @@
-name: null
+name: generalize
 channels:
   - pytorch
   - nvidia
@@ -164,5 +164,5 @@ dependencies:
     - torch-sparse==0.6.13
     - tqdm==4.64.0
     - urllib3==1.26.9
-prefix: /homes/zhou950/scratch/condaenvs/test
+prefix: /home/miniconda3/envs/generalize
 
