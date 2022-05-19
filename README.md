@@ -8,13 +8,17 @@ We empirically validate our theoretical results using Stochastic block models. A
 
 ## Install
 
-To create the conda environment `test`, use the following command
+To create the conda environment `generalize`, use the following command
 
 ```bash
 conda env create -f dependency.yml
 ```
 
-Activate and use the `test` environment for further running of the code.
+Activate and use the `generalize` environment for further running of the code.
+
+```bash
+conda activate generalize
+```
  
  ## How to run
  
