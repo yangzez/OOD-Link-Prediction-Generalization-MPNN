@@ -1,26 +1,12 @@
-import os.path as osp
 import torch
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
-from torch_geometric.nn import SAGEConv
-from torch_geometric.nn import GATConv
-from torch_geometric.nn import GINConv
-#from torch_geometric.nn import GATConv
-import torch_geometric.transforms as T
-import matplotlib.pyplot as plt
 from torch_geometric.utils import from_networkx
-import random
-from torch_geometric.utils import negative_sampling
 from torch.utils.data import DataLoader
 from ogb.linkproppred import Evaluator
-from torch_geometric.nn.conv import MessagePassing
-from torch_geometric.utils import remove_self_loops
 import numpy as np
 import argparse
 import utils
 
-from friendster import Friendster
-#from GNN_model import BasicGNN, GIN
 from torch_sparse import SparseTensor
 import networkx as nx
 
@@ -28,7 +14,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 #device = 'cpu'
 
 def get_arguments(argv):
-    parser = argparse.ArgumentParser(description='Training for MNIST')
+    parser = argparse.ArgumentParser(description='Training for LINK-PREDICTION')
     parser.add_argument('-e', '--n_epochs', type=int, default=500,
                         help='number of epochs (DEFAULT: 100)')
     parser.add_argument('-n_runs', '--num_runs', type=int, default=5,
@@ -89,20 +75,45 @@ class jgMPNN(torch.nn.Module):
         f = torch.sigmoid(f)
         return f
 
-def train(model, f, a, de_2, split_edge, edge_index, optimizer, batch_size):
+class LinkPredictor(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers,
+                 dropout):
+        super(LinkPredictor, self).__init__()
+
+        self.lins = torch.nn.ModuleList()
+        self.lins.append(torch.nn.Linear(in_channels, hidden_channels))
+        for _ in range(num_layers - 2):
+            self.lins.append(torch.nn.Linear(hidden_channels, hidden_channels))
+        self.lins.append(torch.nn.Linear(hidden_channels, out_channels))
+
+        self.dropout = dropout
+
+    def reset_parameters(self):
+        for lin in self.lins:
+            lin.reset_parameters()
+
+    def forward(self, x):
+        for lin in self.lins[:-1]:
+            x = lin(x)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.lins[-1](x)
+        return torch.sigmoid(x)
+
+def train(model, predictor, f, a, de_2, split_edge, edge_index, optimizer, batch_size):
 
     model.train()
-
+    predictor.train()
     pos_train_edge = split_edge['train']['edge'].to(f.device)
     n = int(f.size(0)/100)
     num_nodes = f.size(0)
-    #n = args.num_nodes
 
     total_loss = total_examples = 0
     for perm in DataLoader(range(pos_train_edge.size(0)), batch_size,
                            shuffle=True):
         optimizer.zero_grad()
         f_new = model(a, num_nodes, f, de_2)
+        f_new = predictor(f_new.reshape(-1,1)).reshape(num_nodes, num_nodes)
 
         edge = pos_train_edge[perm].t()
         pos_out = f_new[edge[0], edge[1]]
@@ -137,10 +148,12 @@ def train(model, f, a, de_2, split_edge, edge_index, optimizer, batch_size):
 
 
 @torch.no_grad()
-def test(model, f, a, de_2, split_edge, evaluator, batch_size):
+def test(model, predictor, f, a, de_2, split_edge, evaluator, batch_size):
     model.eval()
+    predictor.eval()
     num_nodes = f.size(0)
     f_new = model(a, num_nodes, f, de_2)
+    f_new = predictor(f_new.reshape(-1,1)).reshape(num_nodes,num_nodes)
     pos_train_edge = split_edge['eval_train']['edge'].to(f.device)
     pos_valid_edge = split_edge['valid']['edge'].to(f.device)
     neg_valid_edge = split_edge['valid']['edge_neg'].to(f.device)
@@ -227,9 +240,8 @@ def test(model, f, a, de_2, split_edge, evaluator, batch_size):
     return results
 
 @torch.no_grad()
-def test_ind(model, length, n, evaluator, batch_size, seed):
+def test_ind(model, predictor, length, n, evaluator, batch_size, seed):
     # Inductive
-    #n = 1
     sizes = [45 * n, 10 * n, 45 * n]
     probs = [[0.55, 0.05, 0.02], [0.05, 0.55, 0.05], [0.02, 0.05, 0.55]]
     g = nx.stochastic_block_model(sizes, probs, seed=seed)
@@ -243,14 +255,11 @@ def test_ind(model, length, n, evaluator, batch_size, seed):
     de_2 = de_2.to(device)
     a = a.to(device)
 
-    #length = 240
-    #torch.manual_seed(135)
     idx = torch.randperm(data.edge_index.size(1))
     idx_tr = idx[:int(0.8 * data.edge_index.size(1))]
     idx_va = idx[int(0.8 * data.edge_index.size(1)):int(0.9 * data.edge_index.size(1))]
     idx_te = idx[int(0.9 * data.edge_index.size(1)):]
-    # edge_neg = negative_sampling(data.edge_index, num_nodes=num_nodes,
-    #                             num_neg_samples=int(0.2 * data.edge_index.size(1)), method='dense')
+
     num_neg_edge = length
     indice_10 = torch.from_numpy(np.random.choice(45 * n, num_neg_edge))
     indice_20 = torch.from_numpy(np.random.choice(45 * n, num_neg_edge) + 55 * n)
@@ -274,9 +283,11 @@ def test_ind(model, length, n, evaluator, batch_size, seed):
     pos_test_edge = split_edge['test']['edge'].to(f.device)
     neg_test_edge = split_edge['test']['edge_neg'].to(f.device)
     model.eval()
+    predictor.eval()
 
     #f_new = model(num_nodes, f, de_2)
     f_new = model(a, num_nodes, f, de_2)
+    f_new = predictor(f_new.reshape(-1, 1)).reshape(num_nodes, num_nodes)
     pos_test_preds = []
     for perm in DataLoader(range(pos_test_edge.size(0)), batch_size):
         edge = pos_test_edge[perm].t()
@@ -297,10 +308,7 @@ def test_ind(model, length, n, evaluator, batch_size, seed):
     TN_test = (neg_test_pred < 0.5).sum() / len(neg_test_pred)
     FP_test = 1 - TN_test
     FN_test = 1 - TP_test
-    print(TP_test)
-    print(TN_test)
-    print(FP_test)
-    print(FN_test)
+
     if TP_test * TN_test - FP_test * FN_test == 0:
         mcc_test = 0
     else:
@@ -333,13 +341,10 @@ def main(seed1,seed2):
 
     length = int(0.1 * data.edge_index.size(1))
     print(length)
-    #torch.manual_seed(135)
     idx = torch.randperm(data.edge_index.size(1))
     idx_tr = idx[:int(0.8 * data.edge_index.size(1))]
     idx_va = idx[int(0.8 * data.edge_index.size(1)):int(0.9 * data.edge_index.size(1))]
     idx_te = idx[int(0.9 * data.edge_index.size(1)):]
-    #edge_neg = negative_sampling(data.edge_index, num_nodes=num_nodes,
-    #                             num_neg_samples=int(0.2 * data.edge_index.size(1)), method='dense')
     num_neg_edge = length
     indice_10 = torch.from_numpy(np.random.choice(45 * n, num_neg_edge))
     indice_20 = torch.from_numpy(np.random.choice(45 * n, num_neg_edge) + 55 * n)
@@ -350,17 +355,10 @@ def main(seed1,seed2):
     edge_neg = torch.cat((id_0, id_1), dim=0)
     idx = torch.randperm(data.edge_index.size(1))
     split_edge = {}
-    # split_edge['eval_train'] = {'edge': split_edge['train']['edge'][idx]}
-    # idx_neg = torch.randperm(2*int(0.1*data.edge_index.size(1)))
     idx_neg = torch.randperm(2 * length)
     edge_neg = edge_neg[:, idx_neg]
-    # split_edge['eval_train'] = {'edge': split_edge['train']['edge'][idx]}
     idx = torch.randperm(int(0.8 * data.edge_index.size(1)))
     idx_eval_tr = idx[:int(0.1 * data.edge_index.size(1))]
-    #split_edge = {}
-    # split_edge['eval_train'] = {'edge': split_edge['train']['edge'][idx]}
-    #idx = torch.randperm(int(0.8 * data.edge_index.size(1)))
-    #idx_eval_tr = idx[:int(0.1 * data.edge_index.size(1))]
 
     split_edge['train'] = {'edge': data.edge_index.t()[idx_tr]}
     split_edge['eval_train'] = {'edge': data.edge_index.t()[idx_tr][idx_eval_tr]}
@@ -370,20 +368,22 @@ def main(seed1,seed2):
     model = jgMPNN(hidden_channels=args.hid_dim).to(device)
     torch.manual_seed(99)
     model.reset_parameters()
-    #predictor.reset_parameters()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    predictor = LinkPredictor(1, args.hid_dim, 1, args.num_layers, 0).to(device)
+    torch.manual_seed(123)
+    predictor.reset_parameters()
+    optimizer = torch.optim.Adam(
+        list(model.parameters()) + list(predictor.parameters()), lr=args.learning_rate)
     evaluator = Evaluator(name='ogbl-ddi')
 
     best_valid_acc = 0
     checkpoint_file_name = "5-15" + str(args.num_nodes) + str(args.hid_dim) + str(args.num_runs) + "model_2GNN_checkpoint.pth.tar"
+    checkpoint_file_name_Y ="5-15" + str(args.hid_dim)+str(args.num_layers)+ str(args.num_nodes)  + "model_2GNN_link_checkpoint.pth.tar"
 
-    # predictor = predictor_gcn
-    # model = model_gcn
     for epoch in range(1, 1 + args.n_epochs):
-        loss = train(model, f, a, de_2, split_edge, data.edge_index,
+        loss = train(model, predictor, f, a, de_2, split_edge, data.edge_index,
                      optimizer, batch_size=args.batch*int(n)*int(n))
         if epoch % 100 == 0:
-            results = test(model, f, a, de_2, split_edge, evaluator, batch_size=320*int(n)*int(n))
+            results = test(model, predictor, f, a, de_2, split_edge, evaluator, batch_size=320*int(n)*int(n))
             for key, result in results.items():
                 train_hits, valid_hits, test_hits, mcc_valid, mcc_test, valid_acc, test_acc = result
                 print(key)
@@ -402,15 +402,15 @@ def main(seed1,seed2):
                 torch.save(model, checkpoint_file_name)
     print('End of GraphSAGE training')
     model = torch.load(checkpoint_file_name)
-    #length = int(0.1*data.edge_index.size(1))
-    #print(length)
+    predictor = torch.load(checkpoint_file_name_Y)
+    results = test(model, predictor, f, a, de_2, split_edge, evaluator, batch_size=1280*int(n)*int(n))
     n_1 = n
-    results_ind = test_ind(model, length, n_1, evaluator, batch_size=128*int(n)*int(n), seed=seed2)
+    results_ind = test_ind(model, predictor, length, n_1, evaluator, batch_size=1280*int(n)*int(n), seed=seed2)
     print('Inductive result for GraphSAGE of '+str(n_1))
     print(results_ind)
 
     n_1 = 10 * n
-    results_ind_1 = test_ind(model, length, n_1, evaluator, batch_size=1280 * int(n_1) * int(n_1),seed=seed2)
+    results_ind_1 = test_ind(model, predictor, length, n_1, evaluator, batch_size=1280*int(n_1) * int(n_1),seed=seed2)
     print(results_ind_1)
 
     train_hits, valid_hits, test_hits_10, mcc_valid, mcc_test, valid_acc, test_acc = results['Hits@10']
@@ -422,7 +422,6 @@ def main(seed1,seed2):
     test_hits_10_ind, mcc_test_ind, test_acc_ind = results_ind['Hits@10']
     test_hits_50_ind, mcc_test_ind, test_acc_ind = results_ind['Hits@50']
     test_hits_100_ind, mcc_test_ind, test_acc_ind = results_ind['Hits@100']
-    #print(list(model.parameters()))
 
     return test_hits_10, test_hits_50, test_hits_100, mcc_test, test_acc, test_hits_10_ind, test_hits_50_ind, test_hits_100_ind, mcc_test_ind, test_acc_ind, test_hits_10_ind_1, test_hits_50_ind_1, test_hits_100_ind_1, mcc_test_ind_1, test_acc_ind_1
 
@@ -431,9 +430,6 @@ if __name__ == "__main__":
     n_runs = args.num_runs
     res = torch.zeros((n_runs, 5))
     res_ind = torch.zeros((n_runs, 10))
-    # seed = [232,11,67,55,12,77,33,66,888,5]
-    # seed = [4566,32,6,55,42,66,888,54,27,2]
-    # seed = [4566, 32, 6, 55, 276, 66, 888, 54, 27, 2]
     np.random.seed(32)
     seed = np.random.randint(1000, size=2 * n_runs)
     for i in range(n_runs):

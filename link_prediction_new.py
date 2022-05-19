@@ -1,27 +1,18 @@
-#import os.path as osp
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from torch_geometric.nn import SAGEConv
 from torch_geometric.nn import GATConv
 from torch_geometric.nn import GINConv
-#from torch_geometric.nn import GATConv
-#import torch_geometric.transforms as T
-#import matplotlib.pyplot as plt
+
 from torch_geometric.utils import from_networkx
-#import random
-#from torch_geometric.utils import negative_sampling
 from torch.utils.data import DataLoader
 from ogb.linkproppred import Evaluator
-#from torch_geometric.nn.conv import MessagePassing
-#from torch_geometric.utils import remove_self_loops
 import numpy as np
 import argparse
 import utils
 import logging
 
-#from friendster import Friendster
-#from GNN_model import BasicGNN, GIN
 from torch_sparse import SparseTensor
 import networkx as nx
 
@@ -61,16 +52,13 @@ class GIN(torch.nn.Module):
         self.num_layer = num_layer
         self.nn1 = torch.nn.Linear(in_channels, hidden_channels)
         self.nn2 = torch.nn.Linear(hidden_channels, out_channels)
-        #self.nn3 = torch.nn.Linear(hidden_channels, out_channels)
         self.bn1 = torch.nn.BatchNorm1d(hidden_channels)
-        #self.bn2 = torch.nn.BatchNorm1d(hidden_channels)
         if num_layer > 2:
             self.nn3 = torch.nn.Linear(hidden_channels, out_channels)
             self.bn2 = torch.nn.BatchNorm1d(hidden_channels)
             self.conv3 = GINConv(self.nn3)
         self.conv1 = GINConv(self.nn1)
         self.conv2 = GINConv(self.nn2)
-        #self.conv3 = GINConv(self.nn3)
 
     def reset_parameters(self):
         self.nn1.reset_parameters()
@@ -78,12 +66,9 @@ class GIN(torch.nn.Module):
         if self.num_layer > 2:
             self.nn3.reset_parameters()
             self.bn2.reset_parameters()
-        #self.nn3.reset_parameters()
         self.bn1.reset_parameters()
-        #self.bn2.reset_parameters()
         self.conv1.reset_parameters()
         self.conv2.reset_parameters()
-        #self.conv3.reset_parameters()
 
     def forward(self, x, adj_t):
         x = self.conv1(x, adj_t)
@@ -95,9 +80,6 @@ class GIN(torch.nn.Module):
             x = self.bn2(x)
             x = F.relu(x)
             x = self.conv3(x, adj_t)
-        #x = self.bn2(x)
-        #x = F.relu(x)
-        #x = self.conv3(x, adj_t)
         return x
 
 class GAT(torch.nn.Module):
@@ -251,7 +233,6 @@ class LinkPredictor_noinn(torch.nn.Module):
             lin.reset_parameters()
 
     def forward(self, x_i, x_j):
-        #x = x_i * x_j
         x = torch.cat((x_i, x_j), dim=1)
         for lin in self.lins[:-1]:
             x = lin(x)
@@ -410,7 +391,6 @@ def test(model, predictor, x, adj_t, split_edge, evaluator, batch_size):
 @torch.no_grad()
 def test_ind(model, predictor, length, n, evaluator, batch_size, seed):
     # Inductive
-    #n = 1
     sizes = [45 * n, 10 * n, 45 * n]
     probs = [[0.55, 0.05, 0.02], [0.05, 0.55, 0.05], [0.02, 0.05, 0.55]]
     #probs = [[0.55, 0.005, 0.002], [0.005, 0.55, 0.005], [0.002, 0.005, 0.55]]
@@ -429,8 +409,6 @@ def test_ind(model, predictor, length, n, evaluator, batch_size, seed):
     idx_tr = idx[:int(0.8 * data.edge_index.size(1))]
     idx_va = idx[int(0.8 * data.edge_index.size(1)):int(0.9 * data.edge_index.size(1))]
     idx_te = idx[int(0.9 * data.edge_index.size(1)):]
-    # edge_neg = negative_sampling(data.edge_index, num_nodes=num_nodes,
-    #                             num_neg_samples=int(0.2 * data.edge_index.size(1)), method='dense')
     num_neg_edge = length
     indice_10 = torch.from_numpy(np.random.choice(45 * n, num_neg_edge))
     indice_20 = torch.from_numpy(np.random.choice(45 * n, num_neg_edge) + 55 * n)
@@ -479,10 +457,6 @@ def test_ind(model, predictor, length, n, evaluator, batch_size, seed):
     TN_test = (neg_test_pred < 0.5).sum() / len(neg_test_pred)
     FP_test = 1 - TN_test
     FN_test = 1 - TP_test
-    #print(TP_test)
-    #print(TN_test)
-    #print(FP_test)
-    #print(FN_test)
     if TP_test * TN_test - FP_test * FN_test == 0:
         mcc_test = 0
     else:
@@ -508,17 +482,11 @@ def main(seed1, seed2):
     data.x = torch.zeros(num_nodes, 1)
     for i in range(num_nodes):
         data.x[i] = g.degree[i]/num_nodes
-    #data.x[:(45 * n)] = 0.05 * 0.99 + 0.002 * 0.9 + 0.05 * 0.002
-    #data.x[(55 * n):] = 0.05 * 0.99 + 0.002 * 0.9 + 0.05 * 0.002
-    #data.x[(45 * n):(55 * n)] = 0.002 * 0.05 * 2 + 0.002 * 0.9
     data.x = data.x.to(device)
     adj = SparseTensor(row=data.edge_index[0], col=data.edge_index[1], sparse_sizes=(num_nodes, num_nodes))
     adj_t = adj.t().to(device)
-    # out_1 = model(data.x, adj_t)
     length = int(0.1 * data.edge_index.size(1))
     print(length)
-    #length = 6250
-    #torch.manual_seed(135)
     idx = torch.randperm(data.edge_index.size(1))
     idx_tr = idx[:int(0.8 * data.edge_index.size(1))]
     idx_va = idx[int(0.8 * data.edge_index.size(1)):int(0.9 * data.edge_index.size(1))]
@@ -533,19 +501,11 @@ def main(seed1, seed2):
     id_0 = torch.cat((indice_10, indice_20)).reshape(1, -1)
     id_1 = torch.cat((indice_11, indice_21)).reshape(1, -1)
     edge_neg = torch.cat((id_0, id_1), dim=0)
-    #idx = torch.randperm(data.edge_index.size(1))
     split_edge = {}
-    # split_edge['eval_train'] = {'edge': split_edge['train']['edge'][idx]}
-    # idx_neg = torch.randperm(2*int(0.1*data.edge_index.size(1)))
     idx_neg = torch.randperm(2 * length)
     edge_neg = edge_neg[:, idx_neg]
-    # split_edge['eval_train'] = {'edge': split_edge['train']['edge'][idx]}
     idx = torch.randperm(int(0.8 * data.edge_index.size(1)))
     idx_eval_tr = idx[:int(0.1 * data.edge_index.size(1))]
-    #split_edge = {}
-    # split_edge['eval_train'] = {'edge': split_edge['train']['edge'][idx]}
-    #idx = torch.randperm(int(0.8 * data.edge_index.size(1)))
-    #idx_eval_tr = idx[:int(0.1 * data.edge_index.size(1))]
 
     split_edge['train'] = {'edge': data.edge_index.t()[idx_tr]}
     split_edge['eval_train'] = {'edge': data.edge_index.t()[idx_tr][idx_eval_tr]}
@@ -572,8 +532,6 @@ def main(seed1, seed2):
         list(model.parameters()) + list(predictor.parameters()), lr=args.learning_rate)
     evaluator = Evaluator(name='ogbl-ddi')
 
-    # predictor = predictor_gcn
-    # model = model_gcn
     best_valid_acc = 0
     valid_losses = []
     checkpoint_file_name = "5-15" + str(args.hid_dim)+str(args.num_layers)+ str(args.num_nodes) + str(args.method) + str(args.noinn) + "model_GNN_checkpoint.pth.tar"
@@ -609,11 +567,10 @@ def main(seed1, seed2):
     model = torch.load(checkpoint_file_name)
     predictor = torch.load(checkpoint_file_name_Y)
     results = test(model, predictor, data.x, adj_t, split_edge, evaluator, batch_size = 1280 * int(n) * int(n))
-    #length = int(0.1*data.edge_index.size(1))
-    #print(length)
+
     n_1 = n
     results_ind = test_ind(model, predictor, length, n_1, evaluator, batch_size=1280 * int(n_1) * int(n_1), seed=seed2)
-    #if args.method != 'GCN':# and args.num_nodes<=10:
+
     n_1 = 10*n
     results_ind_1 = test_ind(model, predictor, length, n_1, evaluator, batch_size=1280*int(n_1)*int(n_1), seed= seed2)
     print(results_ind_1)
@@ -623,16 +580,11 @@ def main(seed1, seed2):
     train_hits, valid_hits, test_hits_10, mcc_valid, mcc_test, valid_acc, test_acc, valid_loss = results['Hits@10']
     train_hits, valid_hits, test_hits_50, mcc_valid, mcc_test, valid_acc, test_acc, valid_loss = results['Hits@50']
     train_hits, valid_hits, test_hits_100, mcc_valid, mcc_test, valid_acc, test_acc, valid_loss = results['Hits@100']
-    #if args.method != 'GCN':# and args.num_nodes <= 10:
+
     test_hits_10_ind_1, mcc_test_ind_1, test_acc_ind_1 = results_ind_1['Hits@10']
     test_hits_50_ind_1, mcc_test_ind_1, test_acc_ind_1 = results_ind_1['Hits@50']
     test_hits_100_ind_1, mcc_test_ind_1, test_acc_ind_1 = results_ind_1['Hits@100']
-    #else:
-    #    test_hits_10_ind_1 = torch.tensor(0)
-    #    test_hits_50_ind_1 = torch.tensor(0)
-    #    test_hits_100_ind_1 = torch.tensor(0)
-    #    mcc_test_ind_1 = torch.tensor(0)
-    #    test_acc_ind_1 = torch.tensor(0)
+
     test_hits_10_ind, mcc_test_ind, test_acc_ind = results_ind['Hits@10']
     test_hits_50_ind, mcc_test_ind, test_acc_ind = results_ind['Hits@50']
     test_hits_100_ind, mcc_test_ind, test_acc_ind = results_ind['Hits@100']
@@ -646,9 +598,6 @@ if __name__ == "__main__":
     n_runs = args.num_runs
     res = torch.zeros((n_runs, 5))
     res_ind = torch.zeros((n_runs, 10))
-    #seed = [232,11,67,55,12,77,33,66,888,5]
-    #seed = [4566,32,6,55,42,66,888,54,27,2]
-    #seed = [4566, 32, 6, 55, 276, 66, 888, 54, 27, 2]
     np.random.seed(32)
     seed = np.random.randint(1000, size=2*n_runs)
     for i in range(n_runs):
